@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""Visualization functions for cerebellar cortical data.
+
+Provides plotting in normal 3D, inflated, and flatmap views using Mayavi
+and Matplotlib, as well as lobular time-signal and time-frequency analysis.
+"""
 # ---------------------------------------------------------------------------
 # Authors: John G Samuelson <johnsam@mit.edu>
 #          Christoph Dinh <christoph.dinh@brain-link.de>
@@ -18,18 +23,32 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
                          smoothing_steps=0, view='all', sub_sampling='sparse', cmap_lims=[1,98]):
     """Plots data on the cerebellar cortical surface. Requires cerebellum geometry file
     to be downloaded.
-    
+
     Parameters
     ----------
-    data : array, shape (n_vertices)
-        Cerebellar data
-    rr : array, shape (n_vertices, 3)
-        Positions of subject-specific vertices.
-    cmap : str
-        Colormap. Needs to be avaible in both mayavi and plotly.
-    view: "all" | "normal" | "inflated" | "flatmap"
-        Which views to show. If view='all', then all (normal, inflated and flamap) are shown.
-        
+    data : array, shape (n_vertices,)
+        Cerebellar data to plot.
+    fwd_src : list
+        Source space from forward solution (contains cortical and cerebellar source spaces).
+    org_src : list
+        Original MNE source space (before joining hemispheres).
+    cerebellum_geo : dict
+        Cerebellum geometry data (loaded from cerebellum_geo file).
+    cort_data : array or None
+        Cortical data to overlay. If None, only cerebellar data is shown.
+    flatmap_cmap : str
+        Colormap for the flatmap view.
+    mayavi_cmap : str or None
+        Colormap for Mayavi 3D views. Auto-selected if None.
+    smoothing_steps : int
+        Number of additional smoothing iterations on the estimate.
+    view : "all" | "normal" | "inflated" | "flatmap"
+        Which views to show. If 'all', then normal, inflated and flatmap are shown.
+    sub_sampling : str
+        Subsampling level ('sparse' or 'dense').
+    cmap_lims : list
+        Percentile limits [lower, upper] for colormap saturation.
+
     Returns
     -------
     figures: list
@@ -41,7 +60,7 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
     import matplotlib.colors as colors
     import matplotlib.tri as mtri
     
-    if not cort_data is None:
+    if cort_data is not None:
         assert cort_data.shape[0]==fwd_src[0]['nuse'], 'cort_data and src[0][\'nuse\'] must have the same number of elements.'
     
     def truncate_colormap(flatmap_cmap, minval=0.0, maxval=1.0, n=500):
@@ -65,7 +84,7 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
         estimate_smoothed[nan_verts] = [np.nanmean(estimate_smoothed[vert_neighbor_group]) for vert_neighbor_group in vert_neighbors]
         nan_verts = np.where(np.isnan(estimate_smoothed))[0]
 
-    if not cort_data is None:
+    if cort_data is not None:
         if not org_src[0]['use_tris'] is None:
             cort_full_mantle = np.zeros(org_src[0]['nuse'])
             cort_full_mantle[:] = np.nan
@@ -115,8 +134,8 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
                                            cerebellum_geo['dw_data'][sub_sampling+'_tris'], scalars=estimate_smoothed, colormap=mayavi_cmap)
          mlab.colorbar()
          figures.append(normal_fig)
-         if not cort_data is None:
-             if not org_src[0]['use_tris'] is None:
+         if cort_data is not None:
+             if org_src[0]['use_tris'] is not None:
                  rr_cx = src_cort['rr'][org_src[0]['vertno'], :]
              else:
                  rr_cx = src_cort['rr']
@@ -374,14 +393,14 @@ def plot_sagittal(vol, only_show_midline=False, **kwargs):
     tris = kwargs.get('tris')
     cmap = kwargs.get('cmap')
     linewidth = kwargs.get('linewidth')
-    if type(cmap) == type(None):
+    if cmap is None:
         cmap = 'gray_r'
-    if type(linewidth) == type(None):
+    if linewidth is None:
         linewidth = 1.
     fig, ax = plt.subplots(3, 2)
     fig.suptitle(title)
 
-    if type(sag_ind) == type(None):
+    if sag_ind is None:
         x_width = vol.shape[0]
         sag_ind = np.linspace(int(x_width*0.1), int(x_width*0.9), 6).astype(int)
 
@@ -393,7 +412,7 @@ def plot_sagittal(vol, only_show_midline=False, **kwargs):
         plt.subplot(3, 2, c+1)
         plt.imshow(image, cmap=cmap)
 
-        if not type(tris) == type(None):
+        if tris is not None:
             z_0 = slice_ind
             cart_ind = 0
             xy = [x for x in range(3) if not x==cart_ind] 
@@ -425,7 +444,7 @@ def plot_sagittal(vol, only_show_midline=False, **kwargs):
                 plt.plot(xy_points[:,1], xy_points[:,0], color='red', linewidth=linewidth)
 
 
-        if not type(nn) == type(None):
+        if nn is not None:
             ptsp = np.where(np.abs(rr[:,0]-(slice_ind-0.5)) < 1.0)[0]
             x_tp = rr[ptsp,2]
             y_tp = rr[ptsp,1]

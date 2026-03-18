@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""Helper utilities for geometric transforms, optimization cost functions,
+connected-region analysis, and PLY mesh I/O.
+"""
 # ---------------------------------------------------------------------------
 # Authors: John G Samuelson <johnsam@mit.edu>
 #          Christoph Dinh <christoph.dinh@brain-link.de>
@@ -14,13 +17,44 @@ from plyfile import PlyData, PlyElement
 import nibabel as nib
 import pickle
 import os
-#import evaler
 from scipy import signal
 
-def set_nnunet_paths():
-    os.system("export nnUNet_raw_data_base=\"/vast/fusion/john/nnUNet/nnUNet_raw_data_base\"")
-    os.system("export nnUNet_preprocessed=\"/vast/fusion/john/nnUNet/nnUNet_preprocessed\"")
-    os.system("export RESULTS_FOLDER=\"/vast/fusion/john/nnUNet/RESULTS_FOLDER\"")
+__all__ = [
+    'save_nifti_from_3darray', 'set_nnunet_paths', 'change_labels',
+    'switch_atlas_labels', 'rotation', 'translation', 'scale',
+    'affine_transform', 'solid_body_transform', 'cost_boundbox',
+    'cost_contrast', 'bound_box_fit', 'find_connected_regions', 'print_ply',
+]
+
+
+def save_nifti_from_3darray(vol, fname, rotate=False, affine=None):
+    if rotate:
+        vol = vol[:, ::-1, ::-1]
+        vol = np.transpose(vol, axes=(0, 2, 1))
+    mgz = nib.Nifti1Image(vol, affine=affine)
+    nib.save(mgz, fname)
+    print('saved to ' + fname)
+    return mgz
+
+
+def set_nnunet_paths(raw_data_base=None, preprocessed=None, results_folder=None):
+    """Set nnU-Net environment variables.
+
+    Parameters
+    ----------
+    raw_data_base : str, optional
+        Path to nnUNet raw data base directory.
+    preprocessed : str, optional
+        Path to nnUNet preprocessed directory.
+    results_folder : str, optional
+        Path to nnUNet results folder.
+    """
+    if raw_data_base is not None:
+        os.environ["nnUNet_raw_data_base"] = raw_data_base
+    if preprocessed is not None:
+        os.environ["nnUNet_preprocessed"] = preprocessed
+    if results_folder is not None:
+        os.environ["RESULTS_FOLDER"] = results_folder
 
 def change_labels(vol, old_labels, new_labels):
     new_vol = vol.copy()
@@ -185,7 +219,7 @@ def find_connected_regions(vol, print_progress=True):
 def print_ply(rr, tris, ply_fname, nn=None):
     my_list = []
 
-    if type(nn) == np.ndarray:
+    if isinstance(nn, np.ndarray):
         for x, y in zip(rr, nn):
             temp_tuple = (x[0], x[1], x[2], y[0], y[1], y[2])            
             my_list.append(temp_tuple)

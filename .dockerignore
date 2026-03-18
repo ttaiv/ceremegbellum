@@ -1,0 +1,13 @@
+.git
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+dist
+build
+.github
+tests
+examples
+*.md
+*.rst
+.gitignore

@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""Core computational functions for cerebellum data processing.
+
+Includes data downloading, image filtering, volumetric segmentation,
+coordinate transforms, parcellation, and Dice coefficient evaluation.
+"""
 # ---------------------------------------------------------------------------
 # Authors: John G Samuelson <johnsam@mit.edu>
 #          Christoph Dinh <christoph.dinh@brain-link.de>
@@ -14,68 +19,68 @@ from plyfile import PlyData, PlyElement
 import nibabel as nib
 import pickle
 import os
+import shutil
+import warnings
 from scipy import signal
-from .helpers import *
+from .helpers import (affine_transform, solid_body_transform, cost_contrast,
+                      change_labels, save_nifti_from_3darray)
 
-def get_cerebellum_data(cmb_path):
+def get_cerebellum_data(cmb_path=None):
     """
     Checks if the required cerebellum data are available and download if not.
-    
+
     Parameters
     ----------
-    cmb_path : str
-        Path to the ceremegbellum folder.
+    cmb_path : str, optional
+        Path to the ceremegbellum data folder. If None, defaults to the
+        package installation directory.
     """
-    if os.path.exists(cmb_path + 'data/cerebellum_geo') and \
-        os.path.isdir(cmb_path + 'nnUNet/RESULTS_FOLDER/nnUNet/3d_fullres/Task001_mask') and \
-        os.path.isdir(cmb_path + 'nnUNet/RESULTS_FOLDER/nnUNet/3d_fullres/Task002_lh') and \
-        os.path.isdir(cmb_path + 'nnUNet/RESULTS_FOLDER/nnUNet/3d_fullres/Task003_rh') and \
-        os.path.isdir(cmb_path + 'nnUNet/RESULTS_FOLDER/nnUNet/3d_fullres/Task004_refine_lobsI_IV') and \
-        os.path.exists(cmb_path + 'data/brain.nii')    :
+    if cmb_path is None:
+        from . import CMB_DATA_DIR
+        cmb_path = CMB_DATA_DIR
+    if os.path.exists(os.path.join(cmb_path, 'data', 'cerebellum_geo')) and \
+        os.path.isdir(os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres', 'Task001_mask')) and \
+        os.path.isdir(os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres', 'Task002_lh')) and \
+        os.path.isdir(os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres', 'Task003_rh')) and \
+        os.path.isdir(os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres', 'Task004_refine_lobsI_IV')) and \
+        os.path.exists(os.path.join(cmb_path, 'data', 'brain.nii'))    :
             print('The required atlas data and segmentation models seem to be downloaded.')
     else:
         from pooch import retrieve
         import zipfile
         print('Seems like some data are missing. No problem, fetching...')
-        os.system('mkdir ' + cmb_path + 'tmp')
-        os.system('mkdir ' + cmb_path + 'data')
-        os.system('mkdir ' + cmb_path + 'nnUNet')
-        os.system('mkdir ' + cmb_path + 'nnUNet/RESULTS_FOLDER')
-        os.system('mkdir ' + cmb_path + 'nnUNet/nnUNet_preprocessed')
-        os.system('mkdir ' + cmb_path + 'nnUNet/nnUNet_raw_data_base')
-        os.system('mkdir ' + cmb_path + 'nnUNet/RESULTS_FOLDER/nnUNet')
-        os.system('mkdir ' + cmb_path + 'nnUNet/RESULTS_FOLDER/nnUNet/3d_fullres')
-        os.system('cp /autofs/cluster/fusion/Exchange/cerebellum-meeg/ceremegbellum.zip ' + \
-                  cmb_path + 'tmp')
-#        retrieve(url='https://osf.io/sdn9h/download',
-#                 known_hash=None, fname='ceremegbellum',
-#                 path=cmb_path + 'tmp') # UNTIL THE REPO IS PUBLIC, YOU NEED TO DO THIS STEP MANUALLY
-        with zipfile.ZipFile(cmb_path + 'tmp/' + 'ceremegbellum.zip', 'r') as zip_ref:
-            zip_ref.extractall(cmb_path + 'tmp')
-        os.system('mv ' + cmb_path + 'tmp/osf_data/cerebellum_geo ' + cmb_path + \
-                  'data/cerebellum_geo')
-        os.system('mv ' + cmb_path + 'tmp/osf_data/brain.nii ' + cmb_path + \
-                  'data/brain.nii')
-        os.system('mv ' + cmb_path + 'tmp/osf_data/Task* ' + cmb_path + 'nnUNet/RESULTS_FOLDER' + \
-                  '/nnUNet/3d_fullres/')
-        os.system('rm -r ' + cmb_path + 'tmp') # clean up
+        os.makedirs(os.path.join(cmb_path, 'tmp'), exist_ok=True)
+        os.makedirs(os.path.join(cmb_path, 'data'), exist_ok=True)
+        os.makedirs(os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres'), exist_ok=True)
+        os.makedirs(os.path.join(cmb_path, 'nnUNet', 'nnUNet_preprocessed'), exist_ok=True)
+        os.makedirs(os.path.join(cmb_path, 'nnUNet', 'nnUNet_raw_data_base'), exist_ok=True)
+        retrieve(url='https://osf.io/sdn9h/download',
+                 known_hash='sha256:1d07115e5d9d04c5b6b4e681f881a7c87a4b06fca07837226dcaf6746e286d54',
+                 fname='ceremegbellum.zip',
+                 path=os.path.join(cmb_path, 'tmp'))
+        with zipfile.ZipFile(os.path.join(cmb_path, 'tmp', 'ceremegbellum.zip'), 'r') as zip_ref:
+            zip_ref.extractall(os.path.join(cmb_path, 'tmp'))
+        shutil.move(os.path.join(cmb_path, 'tmp', 'osf_data', 'cerebellum_geo'),
+                    os.path.join(cmb_path, 'data', 'cerebellum_geo'))
+        shutil.move(os.path.join(cmb_path, 'tmp', 'osf_data', 'brain.nii'),
+                    os.path.join(cmb_path, 'data', 'brain.nii'))
+        # Move all Task* directories
+        tmp_osf = os.path.join(cmb_path, 'tmp', 'osf_data')
+        dest = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres')
+        for item in os.listdir(tmp_osf):
+            if item.startswith('Task'):
+                shutil.move(os.path.join(tmp_osf, item), os.path.join(dest, item))
+        shutil.rmtree(os.path.join(cmb_path, 'tmp'), ignore_errors=True)  # clean up
         print('Done.')
     return
 
-
-def change_labels(vol, old_labels, new_labels):
-    new_vol = vol.copy()
-    for c, old_label in enumerate(old_labels):
-        mask_inds = np.where(vol == old_label)
-        new_vol[mask_inds[0], mask_inds[1], mask_inds[2]] = new_labels[c]
-    return new_vol
 
 def parse_patch(filename, **kargs):
     import struct
     with open(filename, 'rb') as fp:
         header, = struct.unpack('>i', fp.read(4))
         nverts, = struct.unpack('>i', fp.read(4))
-        data = np.fromstring(fp.read(), dtype=[('vert', '>i4'), ('x', '>f4'), ('y', '>f4'), ('z', '>f4')])
+        data = np.frombuffer(fp.read(), dtype=[('vert', '>i4'), ('x', '>f4'), ('y', '>f4'), ('z', '>f4')])
         assert len(data) == nverts
         return data
 
@@ -221,15 +226,15 @@ def print_mgz(mgz, orig_vols, rr_vols, contrasts, data_dir, subject):
     """
     if len(rr_vols) != len(contrasts):
         raise Exception('rr_vols and contrasts must be same length')
-    vol_mod = mgz.get_data().copy()
+    vol_mod = np.asanyarray(mgz.dataobj).copy()
     vol_mod[orig_vols[:, 0], orig_vols[:, 1], orig_vols[:, 2]] = 0
     for c, rr_vol_set in enumerate(rr_vols):
         vol_mod[rr_vol_set[:, 0], rr_vol_set[:, 1], rr_vol_set[:, 2]] = contrasts[c]
     mgz_mod = nib.Nifti1Image(vol_mod, mgz.affine, mgz.header, 
                               mgz.extra, mgz.file_map)
 
-    nib.save(mgz_mod, data_dir + subject + '_tf.mgz')
-    print('volume data saved to ' + data_dir + subject + '_tf.mgz')
+    nib.save(mgz_mod, os.path.join(data_dir, subject + '_tf.mgz'))
+    print('volume data saved to ' + os.path.join(data_dir, subject + '_tf.mgz'))
     return mgz_mod
 
 def mean_cont2tissue_cont(hr_vol, subj_data, cx_subj_vols, wm_subj_vols):
@@ -333,7 +338,7 @@ def image_filter(vols, filter_type, threshold=None, plot=False):
     vols_hp = signal.convolve(vols, kernel, mode="same", method='fft')    
         
     # Threshold and clean
-    if not threshold is None:
+    if threshold is not None:
         vols_hpt = np.zeros(vols_hp.shape)
         vols_hpt[np.where(vols_hp > threshold)] = 1.0
     
@@ -527,7 +532,7 @@ def print_parcellation(rr_labels, rr, cb_data, fname, labels, RH_factor=0.75, el
         print(str(c/4573612*100) + ' % complete', end='\r', flush=True)
 
     # Prepare faces
-    if type(el_face) == type(None):
+    if el_face is None:
         el_face = prepare_faces(cb_data['faces'])
     else:
         el_face = prepare_faces(el_face)
@@ -558,7 +563,7 @@ def remove_verts_from_surface(rr, tris, points_to_keep):
     return rr_cropped, tris_new
 
 def mask_cerb(subjects_dir, subject, vol, hemi='both', pad=0):
-    aseg = np.asanyarray(nib.load(subjects_dir+subject+'/mri/'+'/aseg.mgz').dataobj)
+    aseg = np.asanyarray(nib.load(os.path.join(subjects_dir, subject, 'mri', 'aseg.mgz')).dataobj)
     if hemi == 'both':
         aseg_inds = [7, 8, 46, 47]
     elif hemi == 'lh':
@@ -574,12 +579,14 @@ def mask_cerb(subjects_dir, subject, vol, hemi='both', pad=0):
     return cerb_mask
 
 def print_cerebellum(subjects_dir, subject, fname, hemi='both', pad=0, convert_to_coords = False, crop=False):
-    orig_nib = nib.load(subjects_dir+subject+'/mri/'+'/orig.mgz')
+    orig_nib = nib.load(os.path.join(subjects_dir, subject, 'mri', 'orig.mgz'))
     orig = np.asanyarray(orig_nib.dataobj)
     cerebellum = mask_cerb(subjects_dir, subject, orig, hemi=hemi, pad=pad)
     save_nifti_from_3darray(cerebellum, fname+'.nii.gz', rotate=False, affine=orig_nib.affine)
-    if type(convert_to_coords) == str:
-        os.system('mri_convert --out_orientation '+convert_to_coords+' '+fname+'.nii.gz '+fname+'.nii.gz')
+    if isinstance(convert_to_coords, str):
+        import subprocess
+        subprocess.run(['mri_convert', '--out_orientation', convert_to_coords,
+                       fname + '.nii.gz', fname + '.nii.gz'], check=True)
     return cerebellum
 
 
