@@ -433,18 +433,12 @@ def get_segmentation(subjects_dir, subject, cmb_path=None, region_removal_limit=
         os.makedirs(data_dir, exist_ok=True)
 
     # Check that all prerequisite programs are ready
-    try:
-        if subprocess.run(['mri_convert', '--help'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
-            raise OSError('mri_convert returned non-zero exit code.')
-    except FileNotFoundError:
+    if shutil.which('mri_convert') is None:
         raise OSError('mri_convert not found. FreeSurfer must be installed for segmentation to work.')
     if not os.path.exists(os.path.join(subjects_dir, subject, 'mri', 'orig.mgz')):
         raise FileNotFoundError('Could not locate subject MRI at ' + os.path.join(subjects_dir, subject, 'mri', 'orig.mgz'))
-    try:
-        if subprocess.run(['nnUNetv2_predict', '--help'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
-            raise OSError('nnUNetv2_predict returned non-zero exit code.')
-    except FileNotFoundError:
-        raise OSError('nnUNetv2_predict not found. Please make sure nnUNet v2 is installed and its environment activated and try again.')
+    if shutil.which('nnUNetv2_predict_from_modelfolder') is None:
+        raise OSError('nnUNetv2_predict_from_modelfolder not found. Please make sure nnUNet v2 is installed and its environment activated and try again.')
         
     if os.path.exists(os.path.join(data_dir, subject + '.nii.gz')): # check if segmentation exists
         print('Previous segmentation found on subject '+subject+'. Returning old segmentation.')
