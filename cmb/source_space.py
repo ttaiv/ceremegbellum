@@ -459,71 +459,108 @@ def get_segmentation(subjects_dir, subject, cmb_path=None, region_removal_limit=
         brain_template = brain_template/np.max(brain_template)
         template_ants = ants.from_numpy(brain_template)
 
-        # Register
         output_folder = os.path.join(data_dir, 'tmp')
-        orig_fname = os.path.join(subjects_dir, subject, 'mri', 'brain.mgz')
+        reg_cache_file = os.path.join(output_folder, 'registered', subject + '_reg_cache.pkl')
+        whole_file = os.path.join(output_folder, 'registered', 'whole', subject + '_0000.nii.gz')
 
-        subject_mri = nib.load(orig_fname)
-        subj_brain = np.asanyarray(subject_mri.dataobj)
-        subj_brain = subj_brain/np.max(subj_brain)
-        
-        # Find registration from subject to common space
-        subj_ants = ants.from_numpy(subj_brain)
-        
-        # Calculate registration 
-        reg = ants.registration(fixed=template_ants, moving=subj_ants, type_of_transform='SyNCC')
+        # Check if registration was already completed
+        if os.path.exists(reg_cache_file) and os.path.exists(whole_file):
+            print('Previous registration found for subject ' + subject + '. Loading cached transforms.')
+            with open(reg_cache_file, 'rb') as f:
+                reg = pickle.load(f)
+            subj_reg = np.asanyarray(nib.load(whole_file).dataobj)
+            subject_mri = nib.load(os.path.join(subjects_dir, subject, 'mri', 'brain.mgz'))
+        else:
+            # Register
+            orig_fname = os.path.join(subjects_dir, subject, 'mri', 'brain.mgz')
+            subject_mri = nib.load(orig_fname)
+            subj_brain = np.asanyarray(subject_mri.dataobj)
+            subj_brain = subj_brain/np.max(subj_brain)
 
-        # Prepare for masking
-        subj_reg_ants = ants.apply_transforms(fixed=template_ants, moving=subj_ants,
-                                              transformlist=reg['fwdtransforms'],
-                                              interpolator='nearestNeighbor')
-        subj_reg = subj_reg_ants.numpy()
-        save_nifti_from_3darray(subj_reg, os.path.join(output_folder, 'registered', 'whole', subject + '_0000.nii.gz'),
-                                affine=brain_template_nib.affine)
-        
+            # Find registration from subject to common space
+            subj_ants = ants.from_numpy(subj_brain)
+
+            # Calculate registration
+            print('Registering subject to template space...')
+            reg = ants.registration(fixed=template_ants, moving=subj_ants, type_of_transform='SyNCC')
+
+            # Save registration cache
+            with open(reg_cache_file, 'wb') as f:
+                pickle.dump(reg, f)
+
+            # Prepare for masking
+            subj_reg_ants = ants.apply_transforms(fixed=template_ants, moving=subj_ants,
+                                                  transformlist=reg['fwdtransforms'],
+                                                  interpolator='nearestNeighbor')
+            subj_reg = subj_reg_ants.numpy()
+            save_nifti_from_3darray(subj_reg, whole_file, affine=brain_template_nib.affine)
+
         # Mask
-        model_folder = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres',
-                                     'Task001_mask', 'nnUNetTrainerV2__nnUNetPlansv2.1')
-        subprocess.run(['nnUNetv2_predict_from_modelfolder', '-i', os.path.join(output_folder, 'registered', 'whole'), '-o',
-                        os.path.join(output_folder, 'registered', 'mask'), '-m', model_folder], check=True)
-        
-        # Split into LH and RH using ASEG
-        aseg = np.asanyarray(nib.load(os.path.join(subjects_dir, subject, 'mri', 'aseg.mgz')).dataobj).astype('uint8')
-        aseg = ants.from_numpy(aseg)
-        aseg_reg = ants.apply_transforms(fixed=template_ants, moving=aseg, transformlist=reg['fwdtransforms'],
-                                         interpolator='genericLabel').numpy()
+        mask_output = os.path.join(output_folder, 'registered', 'mask', subject + '.nii.gz')
+        if os.path.exists(mask_output):
+            print('Previous mask prediction found. Skipping mask step.')
+        else:
+            print('Running mask prediction...')
+            model_folder = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres',
+                                         'Task001_mask', 'nnUNetTrainerV2__nnUNetPlansv2.1')
+            subprocess.run(['nnUNetv2_predict_from_modelfolder', '-i', os.path.join(output_folder, 'registered', 'whole'), '-o',
+                            os.path.join(output_folder, 'registered', 'mask'), '-m', model_folder], check=True)
 
-        mask = np.asanyarray(nib.load(os.path.join(output_folder, 'registered', 'mask', subject + '.nii.gz')).dataobj)
-        split_cerebellar_hemis_aseg(aseg_reg, subj_reg, mask, subject, os.path.join(output_folder, 'registered'),
-                                    brain_template_nib.affine)
-        
+        # Split into LH and RH using ASEG
+        lh_input = os.path.join(output_folder, 'registered', 'lh', subject + '_0000.nii.gz')
+        rh_input = os.path.join(output_folder, 'registered', 'rh', subject + '_0000.nii.gz')
+        if os.path.exists(lh_input) and os.path.exists(rh_input):
+            print('Previous hemisphere split found. Skipping split step.')
+        else:
+            aseg = np.asanyarray(nib.load(os.path.join(subjects_dir, subject, 'mri', 'aseg.mgz')).dataobj).astype('uint8')
+            aseg = ants.from_numpy(aseg)
+            aseg_reg = ants.apply_transforms(fixed=template_ants, moving=aseg, transformlist=reg['fwdtransforms'],
+                                             interpolator='genericLabel').numpy()
+            mask = np.asanyarray(nib.load(mask_output).dataobj)
+            split_cerebellar_hemis_aseg(aseg_reg, subj_reg, mask, subject, os.path.join(output_folder, 'registered'),
+                                        brain_template_nib.affine)
+
         # Predict LH and RH
-        model_folder_lh = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres',
-                                        'Task002_lh', 'nnUNetTrainerV2__nnUNetPlansv2.1')
-        subprocess.run(['nnUNetv2_predict_from_modelfolder', '-i', os.path.join(output_folder, 'registered', 'lh'), '-o',
-                        os.path.join(output_folder, 'registered', 'lh_segmented'), '-m', model_folder_lh], check=True)
-        model_folder_rh = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres',
-                                        'Task003_rh', 'nnUNetTrainerV2__nnUNetPlansv2.1')
-        subprocess.run(['nnUNetv2_predict_from_modelfolder', '-i', os.path.join(output_folder, 'registered', 'rh'), '-o',
-                        os.path.join(output_folder, 'registered', 'rh_segmented'), '-m', model_folder_rh], check=True)
-        
+        lh_seg_output = os.path.join(output_folder, 'registered', 'lh_segmented', subject + '.nii.gz')
+        rh_seg_output = os.path.join(output_folder, 'registered', 'rh_segmented', subject + '.nii.gz')
+        if os.path.exists(lh_seg_output):
+            print('Previous LH segmentation found. Skipping LH prediction.')
+        else:
+            print('Running LH prediction...')
+            model_folder_lh = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres',
+                                            'Task002_lh', 'nnUNetTrainerV2__nnUNetPlansv2.1')
+            subprocess.run(['nnUNetv2_predict_from_modelfolder', '-i', os.path.join(output_folder, 'registered', 'lh'), '-o',
+                            os.path.join(output_folder, 'registered', 'lh_segmented'), '-m', model_folder_lh], check=True)
+        if os.path.exists(rh_seg_output):
+            print('Previous RH segmentation found. Skipping RH prediction.')
+        else:
+            print('Running RH prediction...')
+            model_folder_rh = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres',
+                                            'Task003_rh', 'nnUNetTrainerV2__nnUNetPlansv2.1')
+            subprocess.run(['nnUNetv2_predict_from_modelfolder', '-i', os.path.join(output_folder, 'registered', 'rh'), '-o',
+                            os.path.join(output_folder, 'registered', 'rh_segmented'), '-m', model_folder_rh], check=True)
+
         # Refine lob I-IV into lobs I-III and IV
-        pred_nib = nib.load(os.path.join(output_folder, 'registered', 'lh_segmented', subject + '.nii.gz'))
-        vol = np.asanyarray(pred_nib.dataobj)
-        image = np.asanyarray(nib.load(os.path.join(output_folder, 'registered', 'lh', subject + '_0000.nii.gz')).dataobj)
-        lobI_IV = np.zeros(vol.shape)
-        lobI_IV[np.where(vol == 2)] = image[np.where(vol == 2)]
-        pred_nib = nib.load(os.path.join(output_folder, 'registered', 'rh_segmented', subject + '.nii.gz'))
-        vol = np.asanyarray(pred_nib.dataobj)
-        image = np.asanyarray(nib.load(os.path.join(output_folder, 'registered', 'rh', subject + '_0000.nii.gz')).dataobj)
-        lobI_IV[np.where(vol == 2)] = image[np.where(vol == 2)]
-        save_nifti_from_3darray(lobI_IV, os.path.join(output_folder, 'registered', 'lob_I_IV', subject + '_0000.nii.gz'),
-                                rotate=False, affine=pred_nib.affine)
-        
-        model_folder_refine = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres',
-                                            'Task004_refine_lobsI_IV', 'nnUNetTrainerV2__nnUNetPlansv2.1')
-        subprocess.run(['nnUNetv2_predict_from_modelfolder', '-i', os.path.join(output_folder, 'registered', 'lob_I_IV'), '-o',
-                        os.path.join(output_folder, 'registered', 'lob_I_IV_segmented'), '-m', model_folder_refine], check=True)
+        lob_seg_output = os.path.join(output_folder, 'registered', 'lob_I_IV_segmented', subject + '.nii.gz')
+        if os.path.exists(lob_seg_output):
+            print('Previous anterior lobe refinement found. Skipping refinement step.')
+        else:
+            pred_nib = nib.load(lh_seg_output)
+            vol = np.asanyarray(pred_nib.dataobj)
+            image = np.asanyarray(nib.load(os.path.join(output_folder, 'registered', 'lh', subject + '_0000.nii.gz')).dataobj)
+            lobI_IV = np.zeros(vol.shape)
+            lobI_IV[np.where(vol == 2)] = image[np.where(vol == 2)]
+            pred_nib = nib.load(rh_seg_output)
+            vol = np.asanyarray(pred_nib.dataobj)
+            image = np.asanyarray(nib.load(os.path.join(output_folder, 'registered', 'rh', subject + '_0000.nii.gz')).dataobj)
+            lobI_IV[np.where(vol == 2)] = image[np.where(vol == 2)]
+            save_nifti_from_3darray(lobI_IV, os.path.join(output_folder, 'registered', 'lob_I_IV', subject + '_0000.nii.gz'),
+                                    rotate=False, affine=pred_nib.affine)
+            print('Running anterior lobe refinement...')
+            model_folder_refine = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres',
+                                                'Task004_refine_lobsI_IV', 'nnUNetTrainerV2__nnUNetPlansv2.1')
+            subprocess.run(['nnUNetv2_predict_from_modelfolder', '-i', os.path.join(output_folder, 'registered', 'lob_I_IV'), '-o',
+                            os.path.join(output_folder, 'registered', 'lob_I_IV_segmented'), '-m', model_folder_refine], check=True)
         
         # Correct labels
         old_labels_ant = [1, 2, 3, 4]

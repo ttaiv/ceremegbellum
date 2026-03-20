@@ -44,10 +44,10 @@ pip install -e .
 
 Some institutional clusters (e.g., CentOS 7 / RHEL 7) ship with GCC < 9.3 and cannot compile packages like NumPy or SciPy from source. If `pip install` fails with **"NumPy requires GCC >= 9.3"**, use the following approach:
 
-1. **Get a supported Python version.** If conda is available, create a new environment. Otherwise, download a standalone build from [python-build-standalone](https://github.com/astral-sh/python-build-standalone/releases) and create a venv:
+1. **Get a supported Python version (3.12 recommended).** If conda is available, create a new environment. Otherwise, download a standalone build from [python-build-standalone](https://github.com/astral-sh/python-build-standalone/releases) (look for `cpython-3.12.*-x86_64-unknown-linux-gnu-install_only.tar.gz`) and create a venv:
 
    ```bash
-   # Example: extract standalone Python 3.12
+   # Extract standalone Python 3.12
    tar xzf cpython-3.12*-x86_64-unknown-linux-gnu-install_only.tar.gz
    /path/to/python/bin/python3.12 -m venv .venv
    source .venv/bin/activate
@@ -60,14 +60,16 @@ Some institutional clusters (e.g., CentOS 7 / RHEL 7) ship with GCC < 9.3 and ca
    pip install --only-binary :all: \
        numpy scipy pandas matplotlib torch antspyx statsmodels \
        scikit-image scikit-learn imagecodecs numexpr blosc2 \
-       pyyaml Pillow
+       pyyaml Pillow connected-components-3d SimpleITK \
+       "timm<1.0.23" torchvision einops seaborn
    ```
 
 3. **Install source-only packages (pure Python, no compiler needed):**
 
    ```bash
    pip install --no-deps nnunetv2 acvl-utils dynamic-network-architectures \
-       batchgenerators batchgeneratorsv2 ndindex
+       batchgenerators batchgeneratorsv2 ndindex graphviz yacs \
+       fft-conv-pytorch future
    ```
 
 4. **Install CMB and remaining dependencies:**
