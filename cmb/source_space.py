@@ -441,10 +441,10 @@ def get_segmentation(subjects_dir, subject, cmb_path=None, region_removal_limit=
     if not os.path.exists(os.path.join(subjects_dir, subject, 'mri', 'orig.mgz')):
         raise FileNotFoundError('Could not locate subject MRI at ' + os.path.join(subjects_dir, subject, 'mri', 'orig.mgz'))
     try:
-        if subprocess.run(['nnUNet_predict', '--help'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
-            raise OSError('nnUNet_predict returned non-zero exit code.')
+        if subprocess.run(['nnUNetv2_predict', '--help'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
+            raise OSError('nnUNetv2_predict returned non-zero exit code.')
     except FileNotFoundError:
-        raise OSError('nnUNet_predict not found. Please make sure nnUNet is installed and its environment activated and try again.')
+        raise OSError('nnUNetv2_predict not found. Please make sure nnUNet v2 is installed and its environment activated and try again.')
         
     if os.path.exists(os.path.join(data_dir, subject + '.nii.gz')): # check if segmentation exists
         print('Previous segmentation found on subject '+subject+'. Returning old segmentation.')
@@ -488,10 +488,10 @@ def get_segmentation(subjects_dir, subject, cmb_path=None, region_removal_limit=
                                 affine=brain_template_nib.affine)
         
         # Mask
-        subprocess.run(['nnUNet_predict', '-i', os.path.join(output_folder, 'registered', 'whole'), '-o',
-                        os.path.join(output_folder, 'registered', 'mask'), '-tr', 'nnUNetTrainerV2', '-ctr',
-                        'nnUNetTrainerV2CascadeFullRes', '-m', '3d_fullres', '-p',
-                        'nnUNetPlansv2.1', '-t', '001'], check=True)
+        model_folder = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres',
+                                     'Task001_mask', 'nnUNetTrainerV2__nnUNetPlansv2.1')
+        subprocess.run(['nnUNetv2_predict_from_modelfolder', '-i', os.path.join(output_folder, 'registered', 'whole'), '-o',
+                        os.path.join(output_folder, 'registered', 'mask'), '-m', model_folder], check=True)
         
         # Split into LH and RH using ASEG
         aseg = np.asanyarray(nib.load(os.path.join(subjects_dir, subject, 'mri', 'aseg.mgz')).dataobj).astype('uint8')
@@ -504,14 +504,14 @@ def get_segmentation(subjects_dir, subject, cmb_path=None, region_removal_limit=
                                     brain_template_nib.affine)
         
         # Predict LH and RH
-        subprocess.run(['nnUNet_predict', '-i', os.path.join(output_folder, 'registered', 'lh'), '-o',
-                        os.path.join(output_folder, 'registered', 'lh_segmented'), '-tr', 'nnUNetTrainerV2', '-ctr',
-                        'nnUNetTrainerV2CascadeFullRes', '-m', '3d_fullres', '-p',
-                        'nnUNetPlansv2.1', '-t', '002'], check=True)
-        subprocess.run(['nnUNet_predict', '-i', os.path.join(output_folder, 'registered', 'rh'), '-o',
-                        os.path.join(output_folder, 'registered', 'rh_segmented'), '-tr', 'nnUNetTrainerV2', '-ctr',
-                        'nnUNetTrainerV2CascadeFullRes', '-m', '3d_fullres', '-p',
-                        'nnUNetPlansv2.1', '-t', '003'], check=True)
+        model_folder_lh = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres',
+                                        'Task002_lh', 'nnUNetTrainerV2__nnUNetPlansv2.1')
+        subprocess.run(['nnUNetv2_predict_from_modelfolder', '-i', os.path.join(output_folder, 'registered', 'lh'), '-o',
+                        os.path.join(output_folder, 'registered', 'lh_segmented'), '-m', model_folder_lh], check=True)
+        model_folder_rh = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres',
+                                        'Task003_rh', 'nnUNetTrainerV2__nnUNetPlansv2.1')
+        subprocess.run(['nnUNetv2_predict_from_modelfolder', '-i', os.path.join(output_folder, 'registered', 'rh'), '-o',
+                        os.path.join(output_folder, 'registered', 'rh_segmented'), '-m', model_folder_rh], check=True)
         
         # Refine lob I-IV into lobs I-III and IV
         pred_nib = nib.load(os.path.join(output_folder, 'registered', 'lh_segmented', subject + '.nii.gz'))
@@ -526,10 +526,10 @@ def get_segmentation(subjects_dir, subject, cmb_path=None, region_removal_limit=
         save_nifti_from_3darray(lobI_IV, os.path.join(output_folder, 'registered', 'lob_I_IV', subject + '_0000.nii.gz'),
                                 rotate=False, affine=pred_nib.affine)
         
-        subprocess.run(['nnUNet_predict', '-i', os.path.join(output_folder, 'registered', 'lob_I_IV'), '-o',
-                        os.path.join(output_folder, 'registered', 'lob_I_IV_segmented'), '-tr', 'nnUNetTrainerV2', '-ctr',
-                        'nnUNetTrainerV2CascadeFullRes', '-m', '3d_fullres', '-p',
-                        'nnUNetPlansv2.1', '-t', '004'], check=True)
+        model_folder_refine = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres',
+                                            'Task004_refine_lobsI_IV', 'nnUNetTrainerV2__nnUNetPlansv2.1')
+        subprocess.run(['nnUNetv2_predict_from_modelfolder', '-i', os.path.join(output_folder, 'registered', 'lob_I_IV'), '-o',
+                        os.path.join(output_folder, 'registered', 'lob_I_IV_segmented'), '-m', model_folder_refine], check=True)
         
         # Correct labels
         old_labels_ant = [1, 2, 3, 4]
