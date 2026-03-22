@@ -417,6 +417,34 @@ def join_source_spaces(src_orig):
     return src_joined   
 
 
+def _run_nnunet_prediction(model_folder, input_folder, output_folder):
+    """Run nnUNet v1 prediction via the Python API.
+
+    Calls predict_from_folder directly and patches torch.load for
+    compatibility with PyTorch >= 2.6 (which defaults to weights_only=True).
+    """
+    import torch
+    _orig_torch_load = torch.load
+    def _compat_torch_load(*args, **kwargs):
+        if 'weights_only' not in kwargs:
+            kwargs['weights_only'] = False
+        return _orig_torch_load(*args, **kwargs)
+    torch.load = _compat_torch_load
+    try:
+        from nnunet.inference.predict import predict_from_folder
+        predict_from_folder(model_folder, input_folder, output_folder,
+                            folds=None, save_npz=False,
+                            num_threads_preprocessing=6,
+                            num_threads_nifti_save=2,
+                            lowres_segmentations=None,
+                            part_id=0, num_parts=1, tta=True,
+                            mixed_precision=True, overwrite_existing=True,
+                            mode='normal', step_size=0.5,
+                            checkpoint_name="model_final_checkpoint")
+    finally:
+        torch.load = _orig_torch_load
+
+
 def get_segmentation(subjects_dir, subject, cmb_path=None, region_removal_limit=0.2,
                      post_process=True, print_progress=False, debug_mode=False):
     import warnings
@@ -437,8 +465,10 @@ def get_segmentation(subjects_dir, subject, cmb_path=None, region_removal_limit=
         raise OSError('mri_convert not found. FreeSurfer must be installed for segmentation to work.')
     if not os.path.exists(os.path.join(subjects_dir, subject, 'mri', 'orig.mgz')):
         raise FileNotFoundError('Could not locate subject MRI at ' + os.path.join(subjects_dir, subject, 'mri', 'orig.mgz'))
-    if shutil.which('nnUNet_predict') is None:
-        raise OSError('nnUNet_predict not found. Please make sure nnUNet is installed and its environment activated and try again.')
+    try:
+        import nnunet
+    except ImportError:
+        raise ImportError('nnunet not found. Please install the nnunet package (pip install nnunet).')
         
     if os.path.exists(os.path.join(data_dir, subject + '.nii.gz')): # check if segmentation exists
         print('Previous segmentation found on subject '+subject+'. Returning old segmentation.')
@@ -501,10 +531,11 @@ def get_segmentation(subjects_dir, subject, cmb_path=None, region_removal_limit=
             print('Previous mask prediction found. Skipping mask step.')
         else:
             print('Running mask prediction...')
-            subprocess.run(['nnUNet_predict', '-i', os.path.join(output_folder, 'registered', 'whole'), '-o',
-                            os.path.join(output_folder, 'registered', 'mask'), '-tr', 'nnUNetTrainerV2', '-ctr',
-                            'nnUNetTrainerV2CascadeFullRes', '-m', '3d_fullres', '-p',
-                            'nnUNetPlansv2.1', '-t', '001'], check=True)
+            model_folder = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres',
+                                         'Task001_mask', 'nnUNetTrainerV2__nnUNetPlansv2.1')
+            _run_nnunet_prediction(model_folder,
+                                   os.path.join(output_folder, 'registered', 'whole'),
+                                   os.path.join(output_folder, 'registered', 'mask'))
 
         # Split into LH and RH using ASEG
         lh_input = os.path.join(output_folder, 'registered', 'lh', subject + '_0000.nii.gz')
@@ -527,18 +558,20 @@ def get_segmentation(subjects_dir, subject, cmb_path=None, region_removal_limit=
             print('Previous LH segmentation found. Skipping LH prediction.')
         else:
             print('Running LH prediction...')
-            subprocess.run(['nnUNet_predict', '-i', os.path.join(output_folder, 'registered', 'lh'), '-o',
-                            os.path.join(output_folder, 'registered', 'lh_segmented'), '-tr', 'nnUNetTrainerV2', '-ctr',
-                            'nnUNetTrainerV2CascadeFullRes', '-m', '3d_fullres', '-p',
-                            'nnUNetPlansv2.1', '-t', '002'], check=True)
+            model_folder_lh = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres',
+                                            'Task002_lh', 'nnUNetTrainerV2__nnUNetPlansv2.1')
+            _run_nnunet_prediction(model_folder_lh,
+                                   os.path.join(output_folder, 'registered', 'lh'),
+                                   os.path.join(output_folder, 'registered', 'lh_segmented'))
         if os.path.exists(rh_seg_output):
             print('Previous RH segmentation found. Skipping RH prediction.')
         else:
             print('Running RH prediction...')
-            subprocess.run(['nnUNet_predict', '-i', os.path.join(output_folder, 'registered', 'rh'), '-o',
-                            os.path.join(output_folder, 'registered', 'rh_segmented'), '-tr', 'nnUNetTrainerV2', '-ctr',
-                            'nnUNetTrainerV2CascadeFullRes', '-m', '3d_fullres', '-p',
-                            'nnUNetPlansv2.1', '-t', '003'], check=True)
+            model_folder_rh = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres',
+                                            'Task003_rh', 'nnUNetTrainerV2__nnUNetPlansv2.1')
+            _run_nnunet_prediction(model_folder_rh,
+                                   os.path.join(output_folder, 'registered', 'rh'),
+                                   os.path.join(output_folder, 'registered', 'rh_segmented'))
 
         # Refine lob I-IV into lobs I-III and IV
         lob_seg_output = os.path.join(output_folder, 'registered', 'lob_I_IV_segmented', subject + '.nii.gz')
@@ -557,10 +590,11 @@ def get_segmentation(subjects_dir, subject, cmb_path=None, region_removal_limit=
             save_nifti_from_3darray(lobI_IV, os.path.join(output_folder, 'registered', 'lob_I_IV', subject + '_0000.nii.gz'),
                                     rotate=False, affine=pred_nib.affine)
             print('Running anterior lobe refinement...')
-            subprocess.run(['nnUNet_predict', '-i', os.path.join(output_folder, 'registered', 'lob_I_IV'), '-o',
-                            os.path.join(output_folder, 'registered', 'lob_I_IV_segmented'), '-tr', 'nnUNetTrainerV2', '-ctr',
-                            'nnUNetTrainerV2CascadeFullRes', '-m', '3d_fullres', '-p',
-                            'nnUNetPlansv2.1', '-t', '004'], check=True)
+            model_folder_refine = os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres',
+                                                'Task004_refine_lobsI_IV', 'nnUNetTrainerV2__nnUNetPlansv2.1')
+            _run_nnunet_prediction(model_folder_refine,
+                                   os.path.join(output_folder, 'registered', 'lob_I_IV'),
+                                   os.path.join(output_folder, 'registered', 'lob_I_IV_segmented'))
         
         # Correct labels
         old_labels_ant = [1, 2, 3, 4]
