@@ -67,7 +67,7 @@ Some institutional clusters (e.g., CentOS 7 / RHEL 7) ship with GCC < 9.3 and ca
 3. **Install source-only packages (pure Python, no compiler needed):**
 
    ```bash
-   pip install --no-deps nnunetv2 acvl-utils dynamic-network-architectures \
+   pip install --no-deps nnunet acvl-utils dynamic-network-architectures \
        batchgenerators batchgeneratorsv2 ndindex graphviz yacs \
        fft-conv-pytorch future
    ```

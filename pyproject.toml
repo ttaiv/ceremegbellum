@@ -41,7 +41,7 @@ dependencies = [
     "statsmodels>=0.14",
     "antspyx>=0.5",
     "torch>=2.0",
-    "nnunetv2>=2.5",
+    "nnunet>=1.7",
 ]
 
 [project.optional-dependencies]
