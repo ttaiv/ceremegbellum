@@ -3,7 +3,7 @@
 """Visualization functions for cerebellar cortical data.
 
 Provides plotting in normal 3D, inflated, and flatmap views using PyVista
-and Matplotlib, as well as lobular time-signal and time-frequency analysis.
+and Matplotlib.
 """
 # ---------------------------------------------------------------------------
 # Authors: John G Samuelson <johnsam@mit.edu>
@@ -16,11 +16,10 @@ and Matplotlib, as well as lobular time-signal and time-frequency analysis.
 import numpy as np
 import matplotlib.pyplot as plt
 
-from scipy import signal
-
 
 def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None, flatmap_cmap='bwr', mayavi_cmap=None,
-                         smoothing_steps=0, view='all', sub_sampling='sparse', cmap_lims=[1,98]):
+                         smoothing_steps=0, view='all', sub_sampling='sparse', cmap_lims=[1,98],
+                         screenshot=None):
     """Plots data on the cerebellar cortical surface. Requires cerebellum geometry file
     to be downloaded.
 
@@ -48,23 +47,35 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
         Subsampling level ('sparse' or 'dense').
     cmap_lims : list
         Percentile limits [lower, upper] for colormap saturation.
+    screenshot : str or None
+        Base path for saving 3D views as PNG files (e.g. 'output' saves
+        'output_normal.png', 'output_inflated.png'). If None and a display
+        is available, shows interactive windows. On headless systems,
+        screenshots are saved automatically to the current directory.
 
     Returns
     -------
     figures: list
         List containing Figure objects.
-    
+
     """
     try:
         import pyvista as pv
     except ImportError:
         print('PyVista is not installed. 3D views will not be available.')
+        pv = None
     import matplotlib.colors as colors
     import matplotlib.tri as mtri
-    
+
+    # Detect headless environment
+    import os
+    _offscreen = os.environ.get('DISPLAY') is None and os.name != 'nt'
+    if pv is not None and _offscreen:
+        pv.OFF_SCREEN = True
+
     if cort_data is not None:
         assert cort_data.shape[0]==fwd_src[0]['nuse'], 'cort_data and src[0][\'nuse\'] must have the same number of elements.'
-    
+
     def truncate_colormap(flatmap_cmap, minval=0.0, maxval=1.0, n=500):
         new_cmap = colors.LinearSegmentedColormap.from_list(
             'trunc({n},{a:.2f},{b:.2f})'.format(n=flatmap_cmap.name, a=minval, b=maxval),
@@ -74,7 +85,7 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
     figures = []
     src_cerb = fwd_src[1]
     src_cort = fwd_src[0]
-    
+
     print('Smoothing...')
     estimate_smoothed = np.zeros(cerebellum_geo['dw_data'][sub_sampling+'_verts'].shape[0])
     estimate_smoothed[:] = np.nan
@@ -120,8 +131,6 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
             else:
                 mayavi_cmap = 'OrRd'
 
-
-#    estimate_smoothed[np.where(np.isin(src_cerb_org['vertno'], src_cerb['vertno']))] = data
     for step in range(smoothing_steps):
         print('Step '+str(step))
         for vert in range(estimate_smoothed.shape[0]):
@@ -134,7 +143,7 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
         mesh = pv.PolyData(verts, pv_faces)
         mesh.point_data['scalars'] = estimate_smoothed
 
-        plotter = pv.Plotter(window_size=(1200, 1200))
+        plotter = pv.Plotter(window_size=(1200, 1200), off_screen=_offscreen)
         plotter.set_background('white')
         plotter.add_mesh(mesh, scalars='scalars', cmap=mayavi_cmap, scalar_bar_args={'color': 'black'})
         if cort_data is not None:
@@ -147,7 +156,10 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
             cort_mesh.point_data['scalars'] = cort_full_mantle
             plotter.add_mesh(cort_mesh, scalars='scalars', cmap=mayavi_cmap)
         figures.append(plotter)
-        plotter.show()
+        fname = (screenshot or 'cerebellum') + '_normal.png' if _offscreen or screenshot else None
+        plotter.show(screenshot=fname)
+        if fname:
+            print('Saved normal view to ' + fname)
 
     if view in ['all', 'inflated']:
         inf_verts_sub = cerebellum_geo['verts_inflated_fs'][cerebellum_geo['dw_data'][sub_sampling]]
@@ -156,12 +168,15 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
         mesh = pv.PolyData(inf_verts_sub, pv_faces)
         mesh.point_data['scalars'] = estimate_smoothed
 
-        plotter = pv.Plotter(window_size=(1200, 1200))
+        plotter = pv.Plotter(window_size=(1200, 1200), off_screen=_offscreen)
         plotter.set_background('white')
         plotter.add_mesh(mesh, scalars='scalars', cmap=mayavi_cmap, scalar_bar_args={'color': 'black'})
         figures.append(plotter)
-        plotter.show()
-    
+        fname = (screenshot or 'cerebellum') + '_inflated.png' if _offscreen or screenshot else None
+        plotter.show(screenshot=fname)
+        if fname:
+            print('Saved inflated view to ' + fname)
+
     if view in ['all', 'flatmap']:
 
         if np.min(estimate_smoothed) >= 0:
@@ -179,7 +194,7 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
             color_levels = np.vstack((color_levels, np.ones((cmap_lims[0], 4))))
             color_levels = np.vstack((color_levels, red_cmap(np.linspace(0, 1, cmap_lims[1]-cmap_lims[0]))))
             color_levels = np.vstack((color_levels, np.repeat(red_cmap([1.]).reshape(1,4), repeats=100-cmap_lims[1], axis=0)))
-            
+
         max_abs = np.max(np.abs(estimate_smoothed))
         if np.min(estimate_smoothed) >= 0:
             levels = np.linspace(0, max_abs, 101)
@@ -197,7 +212,6 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
             dw_inds = np.where(np.isin(cerebellum_geo['dw_data'][sub_sampling], cerebellum_geo['flatmap_inds'][key]))[0]
             dw_flatinds = cerebellum_geo['dw_data'][sub_sampling][dw_inds]
             flat_verts = cerebellum_geo['verts_flatmap'][dw_flatinds, :]
-#            flat_verts = cerebellum_geo['verts_flatmap'][cerebellum_geo['flatmap_inds'][key], :]
 
             ind_map = np.zeros(cerebellum_geo['dw_data'][sub_sampling].shape[0])
             ind_map[:] = np.nan
@@ -206,21 +220,8 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
                                                                                   dw_inds).all(axis=1))[0], :]
             tris_flat = ind_map[tris_flat].astype(int)
             estimate_flat_all = estimate_smoothed[dw_inds]
-#            ind_map = np.zeros(cerebellum_geo['verts_inflated'].shape[0])
-#            ind_map[:] = np.nan
-#            ind_map[cerebellum_geo['flatmap_inds'][key]] = np.linspace(0,len(cerebellum_geo['flatmap_inds'][key])-1,
-#                                                       len(cerebellum_geo['flatmap_inds'][key])).astype(int)
-#            tris_flat = cerebellum_geo['faces'][np.where(np.isin(cerebellum_geo['faces'],
-#                                       cerebellum_geo['flatmap_inds'][key]).all(axis=1))[0], :]
-#            tris_flat = ind_map[tris_flat].astype(int)
-#            estimate_flat_all = all_estimate_smoothed[cerebellum_geo['flatmap_inds'][key]]
             triang = mtri.Triangulation(-flat_verts[:,0], flat_verts[:,1], tris_flat) # minus x-coord for keeping in neurological coordinates
-            # fig = plt.figure()
-            # from mpl_toolkits.mplot3d import Axes3D
-            # triconf = fig.add_subplot(111, projection='3d')
-            # triconf.plot_trisurf(triang, estimate_flat_all)
-#            plt.pcolormesh(flat_verts[:,0], flat_verts[:,1], estimate_flat_all)
-            triconf = lin.axes.tricontourf(triang, estimate_flat_all, colors=color_levels, levels=levels)# flatmap_cmap=hot_truncated_cmap) 
+            triconf = lin.axes.tricontourf(triang, estimate_flat_all, colors=color_levels, levels=levels)
 
 
         if np.min(levels) < 0:
@@ -232,14 +233,14 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
             max_lev = str(levels[len(levels)-1])[0:4]+str(levels[len(levels)-1])[str(levels[len(levels)-1]).find('e'):]
             max_sat = str(levels[100+cmap_lims[1]])[0:4]+str(levels[100+cmap_lims[1]])[str(levels[100+cmap_lims[1]]).find('e'):]
             max_thresh = str(levels[100+cmap_lims[0]])[0:4]+str(levels[100+cmap_lims[0]])[str(levels[100+cmap_lims[0]]).find('e'):]
-            cbar.ax.set_yticklabels([min_lev, min_sat, min_thresh, '0', max_thresh, max_sat, max_lev])  
+            cbar.ax.set_yticklabels([min_lev, min_sat, min_thresh, '0', max_thresh, max_sat, max_lev])
         else:
-            cbar = flat_fig.colorbar(triconf, ticks=[0, levels[cmap_lims[0]], 
+            cbar = flat_fig.colorbar(triconf, ticks=[0, levels[cmap_lims[0]],
                                                      levels[cmap_lims[1]], levels[len(levels)-1]])
             max_lev = str(levels[len(levels)-1])[0:4]+str(levels[len(levels)-1])[str(levels[len(levels)-1]).find('e'):]
             max_sat = str(levels[cmap_lims[1]])[0:4]+str(levels[cmap_lims[1]])[str(levels[cmap_lims[1]]).find('e'):]
             max_thresh = str(levels[cmap_lims[0]])[0:4]+str(levels[cmap_lims[0]])[str(levels[cmap_lims[0]]).find('e'):]
-            cbar.ax.set_yticklabels(['0', max_thresh, max_sat, max_lev])  
+            cbar.ax.set_yticklabels(['0', max_thresh, max_sat, max_lev])
 
         ant_lob = np.array([[-110, 918], [-86,925], [-52, 935], [-16, 942],
                             [23, 965], [57, 980], [78, 983], [123, 966]])
@@ -247,7 +248,7 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
         crusII_right = np.array([[96, 313], [230, 148]])
         lobVIIb_left = np.array([[-239, -49], [-178, -117]])
         lobVIIb_right = np.array([[255, -211], [244, -119], [265, -75], [293, -71]])
-        
+
         for border_line in [ant_lob, crusII_left, crusII_right, lobVIIb_left, lobVIIb_right]:
             plt.plot(-border_line[:,0], border_line[:,1], linestyle='--', linewidth=0.4, c='k', alpha=1.0) # minus x-coord for keeping in neurological coordinates
         plt.gca().set_aspect('equal')
@@ -294,99 +295,6 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
 
     return figures
 
-# TBD move to functions
-def get_lobular_time_signals(cb_data, fwd, estimate_data):
-    lob_signs = []
-    marks = np.unique(cb_data['parcellation']['surface'])[2:]
-    cb_estimate = estimate_data[fwd['src'][0]['nuse']:, :]
-    for d, mark in enumerate(marks):
-        src_inds = np.where(np.isin(cb_data['parcellation']['surface'][cb_data['dw_data']['dense'][fwd['src'][1]['vertno']]], mark))[0]
-        lob_signs.append(cb_estimate[src_inds, :])
-
-    return lob_signs
-
-
-def plot_lobular_tf(cb_data, fwd, estimate_data, ave):
-    marks = np.unique(cb_data['parcellation']['surface'])[2:]
-    fig, axs = plt.subplots(11, 3, dpi=300, figsize=(10,10), sharex=True, sharey=True)
-    labels = ['lob I-III', 'lob I-III', 'lob IV', 'lob IV', 
-              'lob V', 'lob V', 'lob VI', 'lob VI', 
-              'lob VI', 'lob VII', 'crus I', 'crus II', 
-              'lob VIIb', 'crus I', 'crus II', 'lob VIIb', 
-              'lob VIII', 'lob VIIIa', 'lob VIIIb', 'lob VIIIa', 
-              'lob VIIIb', 'lob IX', 'lob IX', 'lob IX', 
-              'lob X', 'lob X', 'lob X']
-    subplot_pos = [[0, 0], [0, 2], [1, 0], [1, 2], [2, 0], [2, 2], [3, 1], [3, 0],
-                   [3, 2], [4, 1], [4, 0], [5, 0], [6, 0], [4, 2], [5, 2], [6, 2], 
-                   [7, 1], [7, 0], [8, 0], [7, 2], [8, 2], [9, 1], [9, 0], [9, 2],
-                   [10, 1], [10, 0], [10, 2]]
-    axs[0, 0].set_title('left')
-    axs[0, 1].set_title('vermis')
-    axs[0, 2].set_title('right')
-    lob_signs = get_lobular_time_signals(cb_data, fwd, estimate_data)
-
-    fs = ave.info['sfreq']
-    freq = np.linspace(1/ave.times[-1], 50, int(50/3))
-    for d, mark in enumerate(marks):
-        ave_sign = np.mean(np.abs(lob_signs[d]), axis=0)
-        tf_morlet_wavelet(t=ave.times*1000, sig=ave_sign, freq=freq, fs=fs, ax=axs[subplot_pos[d][0], subplot_pos[d][1]],
-                          threshold = 0, sat_threshold=.97);
-        axs[subplot_pos[d][0], subplot_pos[d][1]].plot([0, 0],[freq[0], freq[-1]], linestyle='--', color='cyan', alpha=1)
-        if subplot_pos[d][1] == 0:
-            axs[subplot_pos[d][0], subplot_pos[d][1]].set_ylabel(labels[d]+'\n Freq.(Hz)', fontsize=7)
-        if subplot_pos[d][0] == 10:
-            axs[subplot_pos[d][0], subplot_pos[d][1]].set_xlabel('Time (ms)', fontsize=7)
-
-    return fig, axs
-
-
-def plot_mean_lobular_time_signals(cb_data, fwd, estimate_data, ave):
-    marks = np.unique(cb_data['parcellation']['surface'])[2:]
-    fig, axs = plt.subplots(11, 3, dpi=300, figsize=(10,10), sharex=True, sharey=True)
-    alpha = 0.2
-    labels = ['lob I-III', 'lob I-III', 'lob IV', 'lob IV', 
-              'lob V', 'lob V', 'lob VI', 'lob VI', 
-              'lob VI', 'lob VII', 'crus I', 'crus II', 
-              'lob VIIb', 'crus I', 'crus II', 'lob VIIb', 
-              'lob VIII', 'lob VIIIa', 'lob VIIIb', 'lob VIIIa', 
-              'lob VIIIb', 'lob IX', 'lob IX', 'lob IX', 
-              'lob X', 'lob X', 'lob X']
-    subplot_pos = [[0, 0], [0, 2], [1, 0], [1, 2], [2, 0], [2, 2], [3, 1], [3, 0],
-                   [3, 2], [4, 1], [4, 0], [5, 0], [6, 0], [4, 2], [5, 2], [6, 2], 
-                   [7, 1], [7, 0], [8, 0], [7, 2], [8, 2], [9, 1], [9, 0], [9, 2],
-                   [10, 1], [10, 0], [10, 2]]
-    axs[0, 0].set_title('left')
-    axs[0, 1].set_title('vermis')
-    axs[0, 2].set_title('right')
-    lob_signs = get_lobular_time_signals(cb_data, fwd, estimate_data)
-    for d, mark in enumerate(marks):
-        ave_sign = np.mean(np.abs(lob_signs[d]), axis=0)
-        axs[subplot_pos[d][0], subplot_pos[d][1]].plot(ave.times*1000, ave_sign)
-        if subplot_pos[d][0] == 10:
-            axs[subplot_pos[d][0], subplot_pos[d][1]].set_xlabel('Time (ms)')
-        axs[subplot_pos[d][0], subplot_pos[d][1]].axvline(x=0, linestyle='--', color='k', alpha=alpha)
-        if subplot_pos[d][1] == 0:
-            axs[subplot_pos[d][0], subplot_pos[d][1]].set_ylabel(labels[d])
-    
-    return fig, axs
-
-#TBD correct here?
-def tf_morlet_wavelet(t, sig, freq, fs, ax, threshold=0, sat_threshold=.98, w=6.):
-    w=6. # cycles?
-    widths = w*fs / (2*freq*np.pi)
-    cwtm = signal.cwt(sig, signal.morlet2, widths, w=w)
-    vmax = (np.sort(np.abs(cwtm).flatten()))[int(sat_threshold*np.size(cwtm))]
-    cwtm = np.abs(cwtm)
-    tf_map = np.zeros(cwtm.shape)
-    tf_map[np.where(cwtm > threshold*np.max(cwtm))] = cwtm[np.where(cwtm > threshold*np.max(cwtm))]
-    ax.pcolormesh(t, freq, tf_map, cmap='hot_r', shading='gouraud', vmax=vmax)
-#    ax.plot(tf_uncertainty, freq, 'r--', label='time-frequency Gabor uncertainty limit')
-    ax.set_xlim([t[0], t[-1]])
-#    ax.set_xlabel('time (s)')
-#    ax.set_ylabel('frequency (Hz)')
-#    plt.legend()
-    return 
-
 
 def plot_sagittal(vol, only_show_midline=False, **kwargs):
     sag_ind = kwargs.get('sag_ind')
@@ -418,14 +326,14 @@ def plot_sagittal(vol, only_show_midline=False, **kwargs):
         if tris is not None:
             z_0 = slice_ind
             cart_ind = 0
-            xy = [x for x in range(3) if not x==cart_ind] 
+            xy = [x for x in range(3) if not x==cart_ind]
             intersecting_tris = []
             for tri in tris:
                 rr_0 = rr[tri[0], :]
                 rr_1 = rr[tri[1], :]
                 rr_2 = rr[tri[2], :]
-                if (np.array([np.sign((rr_0[cart_ind]-z_0)*(rr_1[cart_ind]-z_0)), 
-                              np.sign((rr_0[cart_ind]-z_0)*(rr_2[cart_ind]-z_0)), 
+                if (np.array([np.sign((rr_0[cart_ind]-z_0)*(rr_1[cart_ind]-z_0)),
+                              np.sign((rr_0[cart_ind]-z_0)*(rr_2[cart_ind]-z_0)),
                               np.sign((rr_1[cart_ind]-z_0)*(rr_2[cart_ind]-z_0))]) == -1).any():
                     intersecting_tris.append(tri)
             intersecting_tris=np.array(intersecting_tris)
@@ -451,7 +359,6 @@ def plot_sagittal(vol, only_show_midline=False, **kwargs):
             ptsp = np.where(np.abs(rr[:,0]-(slice_ind-0.5)) < 1.0)[0]
             x_tp = rr[ptsp,2]
             y_tp = rr[ptsp,1]
-#            plt.scatter(x_tp, y_tp, color='r', s=0.1)
             plt.quiver(x_tp, y_tp, nn[ptsp,2], -nn[ptsp,1], scale=1, scale_units='inches')
 
     return fig, ax

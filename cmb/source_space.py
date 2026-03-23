@@ -14,12 +14,10 @@ them with MNE-Python cortical source spaces.
 # ---------------------------------------------------------------------------
 
 import numpy as np
-import matplotlib.pyplot as plt
 import nibabel as nib
 import pickle
 import os
 import shutil
-import subprocess
 
 from .helpers import (affine_transform, find_connected_regions, change_labels,
                       set_nnunet_paths, save_nifti_from_3darray)
@@ -32,60 +30,12 @@ def print_fs_surf(rr, tris, fname, mirror=False):
     """
     fsVox2RAS = np.array([[-1, 0, 0, 128], [0, 0,  1, -128],
                             [0, -1, 0, 128]]).T
-#    fsVox2RAS = np.array([[1, 0, 0, 128], [0, 0,  1, -128],
-#                            [0, -1, 0, 128]]).T
-#    fsVox2RAS = np.array([[-0.25, 0, 0, 80], [0, 0,  0.25, -110],
-#                            [0, -0.25, 0, 110]]).T
 
     fs_vox = np.hstack((rr, np.ones((len(rr),1))))
     ras = np.dot(fs_vox, fsVox2RAS)
     if mirror:
         ras[:,0] =  -ras[:,0] # Note this is for MNE which mirrors the source space - remove this for alignment with RAS freeview
     nib.freesurfer.io.write_geometry(fname, ras, tris)
-
-
-def keep_only_biggest_region(vol, region_removal_limit=0.2, print_progress=False):
-    """
-    Keeps only the biggest connected region of each unique value in vol. 
-    If one smaller region is greater than region_removal_limit*len(biggest_region),
-    then do not remove it (set this to >1 if you want to definitely remove all 
-    smaller regions). The removed regions are interpolated by typevalue of
-    neighbors (spreading). Value 0 is considered background and not examined.
-    """
-    connected_regions = find_connected_regions(vol, print_progress=False)
-    neighbors = np.array([[[[x, y, z] for x in np.arange(-1, 2)] for y in np.arange(-1, 2)] for z in np.arange(-1, 2)]).reshape(27,3)
-    if print_progress:
-        for label in list(connected_regions.keys()):
-            print('label '+str(label)+':')
-            for k in range(len(connected_regions[label])):
-                print(len(connected_regions[label][k]))
-    for label in list(connected_regions.keys()):
-        biggest_region = np.argmax([len(connected_regions[label][k]) for k in range(len(connected_regions[label]))])
-        smaller_regions = list(range(len(connected_regions[label])))
-        smaller_regions.remove(biggest_region)
-        for smaller_region in smaller_regions:
-            if len(connected_regions[label][smaller_region]) > region_removal_limit*len(connected_regions[label][biggest_region]):
-                smaller_regions.remove(smaller_region)
-                print('Found a separate region for label '+str(label)+' that is > '+str(region_removal_limit*100)+'% of biggest region. Skipping.')
-        voxels_in_smaller_regions = np.array([[]]).reshape((0,3))
-        for k in smaller_regions:
-            voxels_in_smaller_regions = np.concatenate((voxels_in_smaller_regions, connected_regions[label][k]), axis=0).astype(int)
-        while len(voxels_in_smaller_regions)>0:
-            for vox in voxels_in_smaller_regions:
-                all_neighbors = neighbors+vox
-                all_neighbors = all_neighbors[np.concatenate((all_neighbors < np.array(vol.shape), all_neighbors > np.array([-1, -1, -1])), axis=1).all(axis=1)]
-                val_neighbors = vol[all_neighbors[:, 0], all_neighbors[:, 1], all_neighbors[:, 2]]
-                val_neighbors = val_neighbors[~(val_neighbors == vol[vox[0], vox[1], vox[2]])] # Remove label val to make sure it changes label
-                if len(val_neighbors) > 0:
-                    counts = np.bincount(val_neighbors)
-                    type_val = np.argmax(counts)
-                    if print_progress:
-                        print('Replacing '+str(vox)+', old val: '+str(vol[vox[0], vox[1], vox[2]])+' new val: '+str(type_val))
-                    vol[vox[0], vox[1], vox[2]] = type_val
-                    voxels_in_smaller_regions = voxels_in_smaller_regions[~np.stack([voxels_in_smaller_regions[:,0]==vox[0],
-                                                                                     voxels_in_smaller_regions[:,0]==vox[0], 
-                                                                                     voxels_in_smaller_regions[:,0]==vox[0]]).all(axis=0)]
-    return vol
 
 
 def setup_cerebellum_source_space(subjects_dir, subject, cmb_path=None, cerebellum_subsampling='sparse',
@@ -377,13 +327,8 @@ def setup_full_source_space(subject, subjects_dir, cerb_dir=None, cerb_subsampli
     src_whole[1]['use_tris'] = cerb_subj_data['tris']
     in_use = np.ones(rr.shape[0]).astype(int)
     in_use[cerb_subj_data['nan_nn']] = 0
-#    in_use = np.zeros(rr.shape[0])
-#    in_use[cb_data['dw_data'][cerb_spacing]] = 1
     src_whole[1]['inuse'] = in_use
-    if cerb_subsampling == 'full':
-        src_whole[1]['nuse'] = int(np.sum(src_whole[1]['inuse']))
-    else:
-        src_whole[1]['nuse'] = int(np.sum(src_whole[1]['inuse']))
+    src_whole[1]['nuse'] = int(np.sum(src_whole[1]['inuse']))
     src_whole[1]['vertno'] = np.nonzero(src_whole[1]['inuse'])[0]
     src_whole[1]['np'] = src_whole[1]['rr'].shape[0]
     
@@ -404,7 +349,6 @@ def join_source_spaces(src_orig):
     src_joined['nuse_tri'] = src_orig[0]['nuse_tri'] + src_orig[1]['nuse_tri']
     src_joined['rr'] = np.concatenate((src_orig[0]['rr'],src_orig[1]['rr']),axis=0)
     src_joined['tris'] = np.concatenate((src_orig[0]['tris'],src_orig[1]['tris']+src_orig[0]['np']),axis=0)
-#    src_joined['use_tris'] = np.concatenate((src_orig[0]['use_tris'],src_orig[1]['use_tris']+src_orig[0]['np']),axis=0)
     try:
         src_joined['use_tris'] = np.concatenate((src_orig[0]['use_tris'],src_orig[1]['use_tris']+src_orig[0]['np']),axis=0)
     except Exception:

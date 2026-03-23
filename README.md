@@ -1,9 +1,8 @@
 # Cere-MEG-Bellum (CMB)
 
-[![PyPI](https://badge.fury.io/py/cmb.svg?label=PyPI%20downloads)](https://pypi.org/project/cmb/)
 [![CI](https://github.com/johnsam7/ceremegbellum/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/johnsam7/ceremegbellum/actions/workflows/ci.yml)
 
-CMB is a Python package for **automatic cerebellar cortical surface reconstruction from standard MRI** and **MEG/EEG source space computation including the cerebellum**.
+CMB is a Python package for **fitting a high-resolution cerebellar atlas to standard MRI (ARCUS)** and **MEG/EEG source space computation including the cerebellum**.
 
 For more information about the method, please see:
 
@@ -26,13 +25,7 @@ For more information about the method, please see:
 
 ### Standard Installation
 
-On most systems with a modern toolchain (GCC >= 9.3), install the latest stable version from PyPI:
-
-```bash
-pip install -U cmb
-```
-
-Or install from source for development:
+On most systems with a modern toolchain (GCC >= 9.3):
 
 ```bash
 git clone https://github.com/johnsam7/ceremegbellum.git
@@ -114,36 +107,6 @@ plot_cerebellum_data(data, fwd['src'], src_whole, cb_data,
 ```
 
 See [`examples/example_script.py`](examples/example_script.py) for a complete end-to-end example using the MNE sample dataset.
-
-## Docker
-
-A Docker image is provided with FreeSurfer 7.4.1 and GPU support (NVIDIA PyTorch base image).
-
-**Prerequisites:** Place a FreeSurfer `license.txt` file in the repository root.
-
-```bash
-# Build the image
-docker build -t mne-tools/cmb:v0.1.0 .
-
-# Run with mounted data directories
-docker run -ti \
-  -v /path/to/subjects:/workspace/subjects \
-  -v /path/to/nnUNet:/workspace/nnUNet \
-  --name CMB mne-tools/cmb:v0.1.0
-```
-
-For development inside the container, mount the repo and install in editable mode:
-
-```bash
-docker run -ti \
-  -v /path/to/ceremegbellum:/workspace/ceremegbellum \
-  -v /path/to/subjects:/workspace/subjects \
-  --name CMB mne-tools/cmb:v0.1.0
-
-# Inside the container:
-cd /workspace/ceremegbellum
-pip install -e .
-```
 
 ## License
 
