@@ -1,13 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""Core computational functions for cerebellum data processing."""
-# ---------------------------------------------------------------------------
-# Authors: John G Samuelson <johnsam@mit.edu>
-#          Christoph Dinh <christoph.dinh@brain-link.de>
-# Created: May, 2020
-# License: MIT
-# ---------------------------------------------------------------------------
-
 import os
 import shutil
 
