@@ -61,7 +61,7 @@ Some institutional clusters (e.g., CentOS 7 / RHEL 7) ship with GCC < 9.3 and ca
        numpy scipy pandas matplotlib torch antspyx statsmodels \
        scikit-image scikit-learn imagecodecs numexpr blosc2 \
        pyyaml Pillow connected-components-3d SimpleITK \
-       "timm<1.0.23" torchvision einops seaborn
+       "timm<1.0.23" torchvision einops seaborn dicom2nifti
    ```
 
 3. **Install source-only packages (pure Python, no compiler needed):**
@@ -69,7 +69,7 @@ Some institutional clusters (e.g., CentOS 7 / RHEL 7) ship with GCC < 9.3 and ca
    ```bash
    pip install --no-deps nnunet acvl-utils dynamic-network-architectures \
        batchgenerators batchgeneratorsv2 ndindex graphviz yacs \
-       fft-conv-pytorch future
+       fft-conv-pytorch future medpy
    ```
 
 4. **Install CMB and remaining dependencies:**

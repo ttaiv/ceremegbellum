@@ -45,7 +45,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-viz = ["vtk>=9.3", "mayavi>=4.8", "PyQt5>=5.15"]
+viz = ["pyvista>=0.43"]
 all = ["cmb[viz]"]
 
 [project.urls]

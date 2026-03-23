@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Visualization functions for cerebellar cortical data.
 
-Provides plotting in normal 3D, inflated, and flatmap views using Mayavi
+Provides plotting in normal 3D, inflated, and flatmap views using PyVista
 and Matplotlib, as well as lobular time-signal and time-frequency analysis.
 """
 # ---------------------------------------------------------------------------
@@ -39,7 +39,7 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
     flatmap_cmap : str
         Colormap for the flatmap view.
     mayavi_cmap : str or None
-        Colormap for Mayavi 3D views. Auto-selected if None.
+        Colormap for 3D views. Auto-selected if None.
     smoothing_steps : int
         Number of additional smoothing iterations on the estimate.
     view : "all" | "normal" | "inflated" | "flatmap"
@@ -55,8 +55,10 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
         List containing Figure objects.
     
     """
-
-    from mayavi import mlab
+    try:
+        import pyvista as pv
+    except ImportError:
+        print('PyVista is not installed. 3D views will not be available.')
     import matplotlib.colors as colors
     import matplotlib.tri as mtri
     
@@ -80,7 +82,7 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
     nan_verts = np.where(np.isnan(estimate_smoothed))[0]
 
     while len(nan_verts) > 0:
-        vert_neighbors = np.array(cerebellum_geo['dw_data'][sub_sampling+'_vert_to_neighbor'])[nan_verts]
+        vert_neighbors = np.array(cerebellum_geo['dw_data'][sub_sampling+'_vert_to_neighbor'], dtype=object)[nan_verts]
         estimate_smoothed[nan_verts] = [np.nanmean(estimate_smoothed[vert_neighbor_group]) for vert_neighbor_group in vert_neighbors]
         nan_verts = np.where(np.isnan(estimate_smoothed))[0]
 
@@ -126,38 +128,39 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
             estimate_smoothed[vert] = np.nanmean(estimate_smoothed[cerebellum_geo['dw_data'][sub_sampling+'_vert_to_neighbor'][vert]])
 
     if view in ['all', 'normal']:
-#        print_surf('/autofs/cluster/fusion/john/projects/cerebellum/inv/data/cerebellum_estimate.ply',
-#                  src_cerb['rr'], src_cerb['tris'], cmap=mayavi_cmap, scals=estimate_smoothed, color=np.array([True]))
-                 
-         mlab.figure(bgcolor=(1., 1., 1.), fgcolor=(0., 0., 0.), size=(1200,1200))
-         normal_fig = mlab.triangular_mesh(src_cerb['rr'][:, 0], src_cerb['rr'][:, 1], src_cerb['rr'][:, 2],
-                                           cerebellum_geo['dw_data'][sub_sampling+'_tris'], scalars=estimate_smoothed, colormap=mayavi_cmap)
-         mlab.colorbar()
-         figures.append(normal_fig)
-         if cort_data is not None:
-             if org_src[0]['use_tris'] is not None:
-                 rr_cx = src_cort['rr'][org_src[0]['vertno'], :]
-             else:
-                 rr_cx = src_cort['rr']
-             normal_fig = mlab.triangular_mesh(rr_cx[:, 0], rr_cx[:, 1], rr_cx[:, 2],
-                                              tris_frame, scalars=cort_full_mantle, colormap=mayavi_cmap)
-             figures.append(normal_fig)
-             
-#            print_surf('/autofs/cluster/fusion/john/projects/cerebellum/inv/data/cort_estimate.ply',
-#                      rr_cx, tris_frame, cmap=mayavi_cmap, scals=cort_full_mantle, color=np.array([True]))
-             
+        verts = src_cerb['rr']
+        faces = cerebellum_geo['dw_data'][sub_sampling+'_tris']
+        pv_faces = np.column_stack([np.full(len(faces), 3), faces])
+        mesh = pv.PolyData(verts, pv_faces)
+        mesh.point_data['scalars'] = estimate_smoothed
+
+        plotter = pv.Plotter(window_size=(1200, 1200))
+        plotter.set_background('white')
+        plotter.add_mesh(mesh, scalars='scalars', cmap=mayavi_cmap, scalar_bar_args={'color': 'black'})
+        if cort_data is not None:
+            if org_src[0]['use_tris'] is not None:
+                rr_cx = src_cort['rr'][org_src[0]['vertno'], :]
+            else:
+                rr_cx = src_cort['rr']
+            pv_cort_faces = np.column_stack([np.full(len(tris_frame), 3), tris_frame])
+            cort_mesh = pv.PolyData(rr_cx, pv_cort_faces)
+            cort_mesh.point_data['scalars'] = cort_full_mantle
+            plotter.add_mesh(cort_mesh, scalars='scalars', cmap=mayavi_cmap)
+        figures.append(plotter)
+        plotter.show()
+
     if view in ['all', 'inflated']:
-        # print_surf('/autofs/cluster/fusion/john/projects/cerebellum/inv/data/cerebellum_estimate_inflated.ply',
-        #            cerebellum_geo['verts_inflated'][cerebellum_geo['dw_data'][sub_sampling],:],
-        #            cerebellum_geo['dw_data'][sub_sampling+'_tris'], cmap=mayavi_cmap,
-        #            scals=estimate_smoothed, color=np.array([True]))
-        mlab.figure(bgcolor=(1., 1., 1.), fgcolor=(0., 0., 0.), size=(1200,1200))
-        inflated_fig = mlab.triangular_mesh(cerebellum_geo['verts_inflated_fs'][cerebellum_geo['dw_data'][sub_sampling], 0],
-                                            cerebellum_geo['verts_inflated_fs'][cerebellum_geo['dw_data'][sub_sampling], 1],
-                                            cerebellum_geo['verts_inflated_fs'][cerebellum_geo['dw_data'][sub_sampling], 2], 
-                                            cerebellum_geo['dw_data'][sub_sampling+'_tris'], scalars=estimate_smoothed, colormap=mayavi_cmap)
-        mlab.colorbar()
-        figures.append(inflated_fig)
+        inf_verts_sub = cerebellum_geo['verts_inflated_fs'][cerebellum_geo['dw_data'][sub_sampling]]
+        faces = cerebellum_geo['dw_data'][sub_sampling+'_tris']
+        pv_faces = np.column_stack([np.full(len(faces), 3), faces])
+        mesh = pv.PolyData(inf_verts_sub, pv_faces)
+        mesh.point_data['scalars'] = estimate_smoothed
+
+        plotter = pv.Plotter(window_size=(1200, 1200))
+        plotter.set_background('white')
+        plotter.add_mesh(mesh, scalars='scalars', cmap=mayavi_cmap, scalar_bar_args={'color': 'black'})
+        figures.append(plotter)
+        plotter.show()
     
     if view in ['all', 'flatmap']:
 

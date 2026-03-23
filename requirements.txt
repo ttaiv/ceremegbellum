@@ -15,6 +15,4 @@ torch>=2.0
 nnunet>=1.7
 
 # Optional: 3D visualization (install with: pip install cmb[viz])
-# vtk>=9.3
-# mayavi>=4.8
-# PyQt5>=5.15
+# pyvista>=0.43
