@@ -87,32 +87,6 @@ Some institutional clusters (e.g., CentOS 7 / RHEL 7) ship with GCC < 9.3 and ca
 
 ## Quick Start
 
-```python
-import mne
-import pickle
-import os.path as op
-from cmb import get_cerebellum_data, setup_full_source_space, plot_cerebellum_data, CMB_DATA_DIR
-
-subjects_dir = '/path/to/freesurfer/subjects/'
-subject = 'your_subject'
-
-# Download atlas data and trained segmentation models (first time only)
-get_cerebellum_data()
-
-# Load cerebellum geometry
-cb_data = pickle.load(open(op.join(CMB_DATA_DIR, 'data', 'cerebellum_geo'), 'rb'))
-
-# Set up combined cortical + cerebellar source space
-src_whole = setup_full_source_space(subject, subjects_dir,
-                                    cerb_subsampling='dense', spacing='oct6')
-
-# ... compute forward/inverse solutions with MNE as usual ...
-
-# Visualize cerebellar data on a flatmap
-plot_cerebellum_data(data, fwd['src'], src_whole, cb_data,
-                     view='flatmap', sub_sampling='dense')
-```
-
 See [`examples/example_script.py`](examples/example_script.py) for a complete end-to-end example using the MNE sample dataset.
 
 ## License
