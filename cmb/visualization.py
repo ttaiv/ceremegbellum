@@ -13,7 +13,13 @@ and Matplotlib.
 # ---------------------------------------------------------------------------
 
 
+import os
 import numpy as np
+
+# Use non-interactive backend when no display is available
+import matplotlib
+if os.environ.get('DISPLAY') is None and os.name != 'nt':
+    matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
@@ -68,7 +74,6 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
     import matplotlib.tri as mtri
 
     # Detect headless environment
-    import os
     _offscreen = os.environ.get('DISPLAY') is None and os.name != 'nt'
     if pv is not None and _offscreen:
         pv.OFF_SCREEN = True
@@ -156,6 +161,10 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
             cort_mesh.point_data['scalars'] = cort_full_mantle
             plotter.add_mesh(cort_mesh, scalars='scalars', cmap=mayavi_cmap)
         figures.append(plotter)
+        plotter.camera.position = (0, -1, 0)
+        plotter.camera.up = (0, 0, 1)
+        plotter.camera.focal_point = mesh.center
+        plotter.reset_camera()
         fname = (screenshot or 'cerebellum') + '_normal.png' if _offscreen or screenshot else None
         plotter.show(screenshot=fname)
         if fname:
@@ -172,6 +181,10 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
         plotter.set_background('white')
         plotter.add_mesh(mesh, scalars='scalars', cmap=mayavi_cmap, scalar_bar_args={'color': 'black'})
         figures.append(plotter)
+        plotter.camera.position = (0, -1, 0)
+        plotter.camera.up = (0, 0, 1)
+        plotter.camera.focal_point = mesh.center
+        plotter.reset_camera()
         fname = (screenshot or 'cerebellum') + '_inflated.png' if _offscreen or screenshot else None
         plotter.show(screenshot=fname)
         if fname:
@@ -290,7 +303,12 @@ def plot_cerebellum_data(data, fwd_src, org_src, cerebellum_geo, cort_data=None,
         flat_fig.axes[0].arrow(20, -750, 0, 130, head_width=20, head_length=20, linewidth=0.5, fc='k', ec='k')
         flat_fig.patch.set_visible(False)
         flat_fig.axes[0].axis('off')
-        plt.show()
+        fname = (screenshot or 'cerebellum') + '_flatmap.png' if _offscreen or screenshot else None
+        if fname:
+            flat_fig.savefig(fname, dpi=300, bbox_inches='tight')
+            print('Saved flatmap view to ' + fname)
+        else:
+            plt.show()
         figures.append(flat_fig)
 
     return figures

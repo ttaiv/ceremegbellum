@@ -1,7 +1,5 @@
 # Cere-MEG-Bellum (CMB)
 
-[![CI](https://github.com/johnsam7/ceremegbellum/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/johnsam7/ceremegbellum/actions/workflows/ci.yml)
-
 CMB is a Python package for **fitting a high-resolution cerebellar atlas to standard MRI (ARCUS)** and **MEG/EEG source space computation including the cerebellum**.
 
 For more information about the method, please see:
@@ -33,6 +31,22 @@ cd ceremegbellum
 pip install -e .
 ```
 
+For 3D visualization (normal and inflated views), install the optional visualization dependencies:
+
+```bash
+pip install -e ".[viz]"
+```
+
+If you are plotting on a **remote desktop** (e.g., NoMachine, VNC) and get a segfault, unset `DISPLAY` to force offscreen rendering and use the `screenshot` parameter to save plots to PNG files:
+
+```python
+import os
+os.environ.pop('DISPLAY', None)
+os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'
+
+plot_cerebellum_data(..., screenshot='output')  # saves output_normal.png, etc.
+```
+
 ### Installation on Systems with Older Toolchains
 
 Some institutional clusters (e.g., CentOS 7 / RHEL 7) ship with GCC < 9.3 and cannot compile packages like NumPy or SciPy from source. If `pip install` fails with **"NumPy requires GCC >= 9.3"**, use the following approach:
@@ -51,9 +65,9 @@ Some institutional clusters (e.g., CentOS 7 / RHEL 7) ship with GCC < 9.3 and ca
 
    ```bash
    pip install --only-binary :all: \
-       numpy scipy pandas matplotlib torch antspyx statsmodels \
+       numpy scipy pandas matplotlib torch antspyx \
        scikit-image scikit-learn imagecodecs numexpr blosc2 \
-       pyyaml Pillow connected-components-3d SimpleITK \
+       Pillow connected-components-3d SimpleITK \
        "timm<1.0.23" torchvision einops seaborn dicom2nifti
    ```
 
@@ -68,7 +82,7 @@ Some institutional clusters (e.g., CentOS 7 / RHEL 7) ship with GCC < 9.3 and ca
 4. **Install CMB and remaining dependencies:**
 
    ```bash
-   pip install --only-binary :all: mne nibabel plyfile pooch webcolors
+   pip install --only-binary :all: mne nibabel pooch
    pip install --no-deps -e .
    ```
 

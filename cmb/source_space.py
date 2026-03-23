@@ -582,7 +582,7 @@ def split_cerebellar_hemis_aseg(aseg, brain, mask, subject, output_folder, affin
         pads = ((np.array(aseg.shape)-np.array(mask.shape))/2).astype(int)
         mask_aligned = np.zeros(aseg.shape)
         mask_aligned[pads[0]:aseg.shape[0]-pads[0], pads[1]:aseg.shape[1]-pads[1],
-                     pads[2]:aseg.shape[3]-pads[2]] = mask
+                     pads[2]:aseg.shape[2]-pads[2]] = mask
         mask = np.array(np.nonzero(mask_aligned)).T
     else:
         mask = np.array(np.nonzero(mask)).T
