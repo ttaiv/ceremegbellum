@@ -28,23 +28,16 @@ On most systems with a modern toolchain (GCC >= 9.3):
 ```bash
 git clone https://github.com/johnsam7/ceremegbellum.git
 cd ceremegbellum
-pip install -e .
-```
-
-For 3D visualization (normal and inflated views), install the optional visualization dependencies:
-
-```bash
 pip install -e ".[viz]"
 ```
 
-If you are plotting on a **remote desktop** (e.g., NoMachine, VNC) and get a segfault, unset `DISPLAY` to force offscreen rendering and use the `screenshot` parameter to save plots to PNG files:
+This installs the core package plus [PyVista](https://docs.pyvista.org/) for 3D visualization. If you don't need 3D views (normal/inflated) and only want flatmaps, you can use `pip install -e .` instead.
+
+**Note:** On headless systems (no display), plots are automatically saved as PNG files. On **remote desktops** (e.g., NoMachine, VNC), if 3D views segfault, unset DISPLAY before importing CMB to force offscreen rendering:
 
 ```python
 import os
 os.environ.pop('DISPLAY', None)
-os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'
-
-plot_cerebellum_data(..., screenshot='output')  # saves output_normal.png, etc.
 ```
 
 ### Installation on Systems with Older Toolchains
