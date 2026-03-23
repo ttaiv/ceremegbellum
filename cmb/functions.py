@@ -33,19 +33,35 @@ def get_cerebellum_data(cmb_path=None):
         os.path.exists(os.path.join(cmb_path, 'data', 'brain.nii'))    :
             print('The required atlas data and segmentation models seem to be downloaded.')
     else:
-        from pooch import retrieve
         import zipfile
+        _download_url = 'https://osf.io/sdn9h/download'
+        zip_path = os.path.join(cmb_path, 'tmp', 'ceremegbellum.zip')
         print('Seems like some data are missing. No problem, fetching...')
         os.makedirs(os.path.join(cmb_path, 'tmp'), exist_ok=True)
         os.makedirs(os.path.join(cmb_path, 'data'), exist_ok=True)
         os.makedirs(os.path.join(cmb_path, 'nnUNet', 'RESULTS_FOLDER', 'nnUNet', '3d_fullres'), exist_ok=True)
         os.makedirs(os.path.join(cmb_path, 'nnUNet', 'nnUNet_preprocessed'), exist_ok=True)
         os.makedirs(os.path.join(cmb_path, 'nnUNet', 'nnUNet_raw_data_base'), exist_ok=True)
-        retrieve(url='https://osf.io/sdn9h/download',
-                 known_hash='sha256:1d07115e5d9d04c5b6b4e681f881a7c87a4b06fca07837226dcaf6746e286d54',
-                 fname='ceremegbellum.zip',
-                 path=os.path.join(cmb_path, 'tmp'))
-        with zipfile.ZipFile(os.path.join(cmb_path, 'tmp', 'ceremegbellum.zip'), 'r') as zip_ref:
+
+        if not os.path.exists(zip_path):
+            try:
+                from pooch import retrieve
+                retrieve(url=_download_url,
+                         known_hash='sha256:1d07115e5d9d04c5b6b4e681f881a7c87a4b06fca07837226dcaf6746e286d54',
+                         fname='ceremegbellum.zip',
+                         path=os.path.join(cmb_path, 'tmp'))
+            except Exception as e:
+                print(f'\nDownload failed: {e}\n'
+                      f'You can download the file manually from:\n'
+                      f'  {_download_url}\n'
+                      f'and save it to:\n'
+                      f'  {zip_path}\n'
+                      f'Then re-run get_cerebellum_data().')
+                return
+        else:
+            print('Found previously downloaded zip file. Skipping download.')
+
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(os.path.join(cmb_path, 'tmp'))
         shutil.move(os.path.join(cmb_path, 'tmp', 'osf_data', 'cerebellum_geo'),
                     os.path.join(cmb_path, 'data', 'cerebellum_geo'))
