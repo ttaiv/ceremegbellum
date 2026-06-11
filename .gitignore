@@ -31,3 +31,7 @@ htmlcov/
 .vscode/
 *.swp
 *.swo
+
+# Jypyter Notebook
+.ipynb_checkpoints/
+.virtual_documents/
