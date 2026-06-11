@@ -1,5 +1,11 @@
 # Cere-MEG-Bellum (CMB)
 
+>**Fork status**
+>
+>This fork aspires to increase the packages's user friendliness and compatibility with
+>[MNE-Python](https://mne.tools/stable/). In the end, goal is to publish the package to conda-forge (and probably also to PyPI)
+>so that it would be an easy-to-install add-on for MNE-Python (like [MNE-Connectivity](https://mne.tools/mne-connectivity/)).
+
 CMB is a Python package for **fitting a high-resolution cerebellar atlas to standard MRI (ARCUS)** and **MEG/EEG source space computation including the cerebellum**.
 
 For more information about the method, please see:
